@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # The name of the deployment
+  name: hello-world-deployment
+  # It's good practice to specify the namespace, e.g., 'development'
+  namespace: development
+spec:
+  # This field directly fulfills the requirement for 2 instances 
+  replicas: 2
+  selector:
+    # This selector helps the Deployment find which Pods to manage
+    matchLabels:
+      app: hello-world
+  template:
+    metadata:
+      # The Pods created will have this label
+      labels:
+        app: hello-world
+    spec:
+      containers:
+      - name: hello-world-app
+        # This image URL is a placeholder.
+        # The CI/CD pipeline (Jenkins) will dynamically replace this
+        # with the correct image from your container registry (e.g., Amazon ECR) and the build tag.
+        image: YOUR_DOCKER_REGISTRY/hello-world: latest
+        ports:
+        # The port that the container exposes
+        - containerPort: 8080

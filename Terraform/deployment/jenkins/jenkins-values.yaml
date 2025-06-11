@@ -1,0 +1,23 @@
+# jenkins/jenkins-values.yaml
+
+controller:
+  serviceType: LoadBalancer
+  installPlugins:
+    # These plugins are listed WITHOUT version numbers
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - configuration-as-code
+
+  # This section prevents "Insufficient CPU/Memory" errors
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+# This section solves the storage errors
+persistence:
+  enabled: false

@@ -1,0 +1,15 @@
+# jenkins/sonarqube-values.yaml
+
+service:
+  type: LoadBalancer
+  port: 9000
+
+monitoringPasscode: "your-secure-password"
+
+community:
+  enabled: true
+
+# This section is the key to fixing the error
+postgresql:
+  persistence:
+    enabled: false
