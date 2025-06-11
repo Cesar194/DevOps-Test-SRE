@@ -1,7 +1,6 @@
 // jenkins/Jenkinsfile - Final Definitive Version
 
 pipeline {
-    // Define one powerful agent pod for the entire pipeline
     agent {
         kubernetes {
             yaml '''
@@ -10,11 +9,8 @@ kind: Pod
 spec:
   serviceAccountName: default
   containers:
-  # The main build agent, based on a standard Ubuntu OS
-  # All our steps will run in here after we install the tools.
   - name: build-agent
     image: ubuntu:22.04
-    # We need to run as root to install software with apt-get
     securityContext:
       runAsUser: 0
     command:
@@ -24,7 +20,6 @@ spec:
     env:
     - name: DOCKER_HOST
       value: tcp://localhost:2375
-  # The Docker-in-Docker sidecar container
   - name: dind
     image: docker:20.10.17-dind
     securityContext:
@@ -46,26 +41,17 @@ spec:
     stages {
         stage('Initialize Build Environment') {
             steps {
-                // All steps will now run in the 'build-agent' container
                 container('build-agent') {
                     sh '''
                     echo "Installing all necessary tools..."
-                    # Set frontend to noninteractive to prevent apt-get from asking questions
                     export DEBIAN_FRONTEND=noninteractive
-                    # Use apt-get, the correct package manager for Ubuntu
                     apt-get update
-                    apt-get install -y openjdk-17-jdk maven git curl python3-pip
+                    apt-get install -y openjdk-17-jdk maven git curl python3-pip docker.io
                     
-                    # Install AWS CLI
                     pip3 install awscli
 
-                    # Install kubectl
                     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                     install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-                    
-                    # Install Docker client
-                    curl -fsSL https://get.docker.com -o get-docker.sh
-                    sh get-docker.sh
                     
                     echo "Tool installation complete."
                     '''
@@ -75,7 +61,6 @@ spec:
 
         stage('Checkout') {
             steps {
-                // This now runs in the same, persistent 'build-agent' container
                 checkout scm
             }
         }
@@ -84,7 +69,7 @@ spec:
             steps {
                 container('build-agent') {
                     sh 'mvn clean package'
-                    stash includes: 'target/*.jar', name: 'app-jar'
+                    // The 'stash' step is now removed
                     withSonarQubeEnv('SonarQube') {
                         sh 'mvn sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_AUTH_TOKEN'
                     }
@@ -103,7 +88,7 @@ spec:
         stage('Build & Push Docker Image') {
             steps {
                 container('build-agent') {
-                    unstash 'app-jar'
+                    // The 'unstash' step is now removed
                     sh """
                     echo "Waiting for Docker daemon..."
                     while ! docker info; do
