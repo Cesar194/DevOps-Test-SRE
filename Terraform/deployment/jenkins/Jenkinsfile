@@ -1,16 +1,19 @@
-// jenkins/Jenkinsfile - Final Definitive Version
+// jenkins/Jenkinsfile - Final Version with Correct Manifest Path
 
 pipeline {
     agent {
         kubernetes {
+            defaultContainer 'build-agent'
             yaml '''
 apiVersion: v1
 kind: Pod
 spec:
   serviceAccountName: default
   containers:
+  # The main build agent, based on a standard Ubuntu OS
   - name: build-agent
     image: ubuntu:22.04
+    # Run as root to install software with apt-get
     securityContext:
       runAsUser: 0
     command:
@@ -20,6 +23,7 @@ spec:
     env:
     - name: DOCKER_HOST
       value: tcp://localhost:2375
+  # The Docker-in-Docker sidecar container
   - name: dind
     image: docker:20.10.17-dind
     securityContext:
@@ -39,40 +43,30 @@ spec:
     }
 
     stages {
-        stage('Initialize Build Environment') {
+        stage('Initialize Build Environment & Checkout') {
             steps {
-                container('build-agent') {
-                    sh '''
-                    echo "Installing all necessary tools..."
-                    export DEBIAN_FRONTEND=noninteractive
-                    apt-get update
-                    apt-get install -y openjdk-17-jdk maven git curl python3-pip docker.io
-                    
-                    pip3 install awscli
+                sh '''
+                echo "Installing all necessary tools..."
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update
+                apt-get install -y openjdk-17-jdk maven git curl python3-pip docker.io
+                
+                pip3 install awscli
 
-                    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-                    
-                    echo "Tool installation complete."
-                    '''
-                }
-            }
-        }
-
-        stage('Checkout') {
-            steps {
+                curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+                
+                echo "Tool installation complete."
+                '''
                 checkout scm
             }
         }
 
         stage('Build & Analyze') {
             steps {
-                container('build-agent') {
-                    sh 'mvn clean package'
-                    // The 'stash' step is now removed
-                    withSonarQubeEnv('SonarQube') {
-                        sh 'mvn sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_AUTH_TOKEN'
-                    }
+                sh 'mvn clean package'
+                withSonarQubeEnv('SonarQube') {
+                    sh 'mvn sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_AUTH_TOKEN'
                 }
             }
         }
@@ -87,34 +81,32 @@ spec:
 
         stage('Build & Push Docker Image') {
             steps {
-                container('build-agent') {
-                    // The 'unstash' step is now removed
-                    sh """
-                    echo "Waiting for Docker daemon..."
-                    while ! docker info; do
-                      sleep 1
-                    done
-                    echo "Docker daemon is ready."
+                // The .jar file is already in the workspace from the build stage
+                sh """
+                echo "Waiting for Docker daemon..."
+                while ! docker info; do
+                  sleep 1
+                done
+                echo "Docker daemon is ready."
 
-                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-                    aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region us-east-1 || true
-                    docker build -t ${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} .
-                    docker push ${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}
-                    """
-                }
+                aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region us-east-1 || true
+                docker build -t ${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} .
+                docker push ${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}
+                """
             }
         }
 
         stage('Deploy to Development') {
             steps {
-                container('build-agent') {
-                    withCredentials([file(credentialsId: 'kubeconfig-dev', variable: 'KUBECONFIG_FILE')]) {
-                        sh '''
-                        echo "Deploying to development cluster..."
-                        kubectl --kubeconfig $KUBECONFIG_FILE apply -f kubernetes/ -n development
-                        kubectl --kubeconfig $KUBECONFIG_FILE set image deployment/hello-world-deployment hello-world-app=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} -n development
-                        '''
-                    }
+                withCredentials([file(credentialsId: 'kubeconfig-dev', variable: 'KUBECONFIG_FILE')]) {
+                    sh '''
+                    echo "Deploying to development cluster..."
+                    # --- THIS IS THE FINAL FIX ---
+                    # The path to the kubernetes manifests has been corrected
+                    kubectl --kubeconfig $KUBECONFIG_FILE apply -f Terraform/development/kubernetes/ -n development
+                    kubectl --kubeconfig $KUBECONFIG_FILE set image deployment/hello-world-deployment hello-world-app=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} -n development
+                    '''
                 }
             }
         }
