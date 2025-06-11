@@ -1,62 +1,46 @@
 # DevOpsTest
 Repository to provide the solution of the DevOps technical test
-# SRE / DevOps Technical Challenge - Banco Cuscatlan
 
-This repository contains the complete solution for the SRE/DevOps technical challenge. The project provisions two Kubernetes clusters on AWS using Terraform and sets up a full CI/CD pipeline with Jenkins and SonarQube to build and deploy a Java 17 "Hello World" application. 
+# Prueba Técnica SRE / DevOps
 
-## Architecture Diagram
+Este repositorio contiene la solución completa para la prueba técnica de SRE / DevOps. El proyecto consiste en la creación de una infraestructura Cloud-Native en AWS y un pipeline de CI/CD completamente automatizado para compilar, analizar, probar, empaquetar y desplegar una aplicación Java.
+
+## Diagrama de la Solución
 
 https://drive.google.com/file/d/1LV0NmSey8lRKoiWfxzHNIea1lf6V1vji/view?usp=sharing
 
-## Project Structure
+---
 
-A brief explanation of the project's directory structure:
-- **/terraform**: Contains all Terraform code for provisioning the AWS infrastructure.  It's split into `development` and `deployment` environments.
-- **/kubernetes**: Contains the Kubernetes manifest files (`deployment.yaml`, `service.yaml`) for the application.
-- **/jenkins**: Contains the `Jenkinsfile` which defines the CI/CD pipeline.
-- **Dockerfile**: Used to containerize the Java application.
+## Principios DevOps y Mejores Prácticas Implementadas
 
-## Prerequisites
+Esta solución fue diseñada aplicando principios DevOps modernos y mejores prácticas de la industria para garantizar la seguridad, eficiencia y repetibilidad.
 
-To run this project, you will need the following tools installed:
-- AWS CLI
-- Terraform
-- kubectl
-- Helm
-- A registered AWS account
+### 🔹 Infraestructura como Código (IaC)
+**Repetibilidad y Consistencia:** Toda la infraestructura, incluyendo la VPC, subnets, gateways y los dos clústeres de EKS, se provisiona utilizando **Terraform**. Esto garantiza que los entornos de `deployment` y `development` puedan ser creados y destruidos de forma idéntica y predecible, eliminando la deriva de configuración.
+* **Control de Versiones:** La infraestructura está versionada en Git, permitiendo revisiones, auditorías y un historial completo de cambios.
 
-## Setup and Deployment Instructions
+### 🔹 Automatización CI/CD
+**Pipeline como Código:** Se utiliza un **`Jenkinsfile`** para definir el pipeline de CI/CD de forma declarativa. Esto permite que el propio pipeline sea versionado, revisado y reutilizado.
+* **Flujo End-to-End:** El pipeline automatiza cada paso del ciclo de vida del software: compilación, análisis de código, construcción de imagen Docker, publicación en un registro privado y despliegue en Kubernetes.
 
-Follow these steps to deploy the entire solution from scratch:
+### 🔹 Calidad Continua y "Shift-Left Security"
+**Análisis Estático de Código:** Se integra **SonarQube** en el pipeline para analizar el código en busca de bugs, vulnerabilidades y "code smells" en una fase temprana del desarrollo.
+**Quality Gates:** El pipeline se detiene si el código no cumple con los umbrales de calidad mínimos definidos en el Quality Gate de SonarQube, previniendo que código de baja calidad llegue a producción.
 
-1.  **Clone Repository**: 'git clone https://github.com/Cesar194/DevOps-Test-SRE'
-2.  **Configure AWS Credentials**: Run `aws configure` and provide valid IAM credentials.
-3.  **Provision Development Cluster**:
-    ```bash
-    cd terraform/development
-    terraform init
-    terraform apply
-    ```
-4.  **Provision Deployment Cluster**:
-    ```bash
-    cd ../deployment
-    terraform init
-    terraform apply
-    ```
-5.  **Configure `kubectl`**: Run `aws eks update-kubeconfig` for both clusters as detailed in the setup guide.
-6.  **Install Jenkins & SonarQube**: Follow the Helm installation steps previously outlined.
-7.  **Create and Run Jenkins Pipeline**: Set up the pipeline job in Jenkins pointing to this repository's `jenkins/Jenkinsfile`.
+### 🔹 Contenedores y Orquestación
+**Inmutabilidad:** La aplicación se empaqueta en una imagen de **Docker**, creando un artefacto inmutable que se comporta de la misma manera en cualquier entorno.
+**Alta Disponibilidad:** La aplicación se despliega en **Kubernetes** con **2 réplicas**, garantizando la disponibilidad y el balanceo de carga. El servicio se expone de forma segura a través de un **Load **Balancer** gestionado por Kubernetes.
+**Agentes de Build Efímeros:** Jenkins utiliza el plugin de Kubernetes para crear agentes de build dinámicos y efímeros. Cada pipeline se ejecuta en su propio pod, garantizando un entorno limpio y aislado para cada ejecución y optimizando el uso de recursos.
 
-## How to Access the Services
+---
 
--   **Jenkins**: Accessible at `http://<JENKINS_LOAD_BALANCER_IP>:8080`.
--   **SonarQube**: Accessible at `http://<SONARQUBE_LOAD_BALANCER_IP>:9000`. The default credentials are `admin`/`admin`.
+## Consideraciones de Seguridad Implementadas
 
-## Security Considerations
+La seguridad fue un pilar fundamental en el diseño de esta solución.
 
-[cite_start]Security was a key consideration in this project:
-- **IAM Roles for EKS**: Dedicated IAM roles are used for the EKS clusters and their node groups to grant specific, limited permissions.
-- **Secrets Management**: Sensitive data like the SonarQube token and kubeconfig files are managed as Jenkins credentials, not stored in the repository.
-- **Network Isolation**: Each cluster operates in its own dedicated VPC to prevent unauthorized cross-environment traffic.
+**Gestión Segura de Credenciales:** No se almacena ninguna credencial sensible (tokens, contraseñas, claves de AWS) en el `Jenkinsfile` o en el código fuente. Se utiliza el **Gestor de Credenciales de Jenkins** para almacenar de forma segura todos los secretos.
+**IAM Roles para Service Accounts (IRSA):** Se implementó el método más seguro y moderno para otorgar permisos de AWS a las cargas de trabajo en EKS. Los pods de Jenkins asumen un **Rol de IAM** en tiempo de ejecución para obtener credenciales temporales y de corta duración, eliminando la necesidad de claves de acceso estáticas y de larga duración.
+**Principio de Menor Privilegio:** Se crearon políticas de IAM personalizadas que otorgan únicamente los permisos necesarios para cada tarea (ej. permisos para ECR, `iam:PassRole`, etc.), en lugar de usar permisos de administrador genéricos.
+* **Aislamiento de Red:** Cada clúster opera en su propia VPC, garantizando el aislamiento de la red entre el entorno de herramientas de CI/CD y el entorno de la aplicación.
 
 ---
