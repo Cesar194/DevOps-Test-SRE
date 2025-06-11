@@ -1,4 +1,4 @@
-// jenkins/Jenkinsfile - Final Definitive Version
+// jenkins/Jenkinsfile - The Final Version
 
 pipeline {
     agent {
@@ -74,7 +74,7 @@ spec:
 
         stage('Build & Push Docker Image') {
             steps {
-                // The .jar file from the build stage is available because we use a single agent
+                // The .jar file is already in the workspace from the build stage
                 sh """
                 echo "Waiting for Docker daemon..."
                 while ! docker info; do
@@ -92,8 +92,6 @@ spec:
 
         stage('Deploy to Development') {
             steps {
-                // --- THIS STAGE IS NOW CORRECTED ---
-                // It now loads the dedicated AWS credentials for the development cluster
                 withCredentials([
                     file(credentialsId: 'kubeconfig-dev', variable: 'KUBECONFIG_FILE'),
                     string(credentialsId: 'DEV_AWS_ACCESS_KEY_ID', variable: 'AWS_ACCESS_KEY_ID'),
@@ -101,10 +99,16 @@ spec:
                 ]) {
                     sh '''
                     echo "Deploying to development cluster..."
-                    # The AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables will be
-                    # automatically used by kubectl when it calls 'aws eks get-token'.
                     
+                    # --- THIS IS THE FINAL FIX ---
+                    # Create the namespace if it does not exist.
+                    # The '|| true' ensures the command succeeds even if the namespace is already there.
+                    kubectl --kubeconfig $KUBECONFIG_FILE create namespace development || true
+                    
+                    # Apply the Kubernetes manifests
                     kubectl --kubeconfig $KUBECONFIG_FILE apply -f Terraform/development/kubernetes/ -n development
+                    
+                    # Update the deployment with the newly built image
                     kubectl --kubeconfig $KUBECONFIG_FILE set image deployment/hello-world-deployment hello-world-app=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} -n development
                     '''
                 }
