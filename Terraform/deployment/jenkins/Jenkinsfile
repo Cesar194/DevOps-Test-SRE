@@ -1,4 +1,4 @@
-// jenkins/Jenkinsfile - The Final Version
+// jenkins/Jenkinsfile - Final Definitive Version
 
 pipeline {
     agent {
@@ -74,7 +74,7 @@ spec:
 
         stage('Build & Push Docker Image') {
             steps {
-                // The .jar file is already in the workspace from the build stage
+                // The .jar file is already here because we use a single agent
                 sh """
                 echo "Waiting for Docker daemon..."
                 while ! docker info; do
@@ -97,19 +97,23 @@ spec:
                     string(credentialsId: 'DEV_AWS_ACCESS_KEY_ID', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'DEV_AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
+                    // --- THIS SCRIPT IS NOW MORE ROBUST ---
                     sh '''
+                    set -e
+                    
                     echo "Deploying to development cluster..."
                     
-                    # --- THIS IS THE FINAL FIX ---
-                    # Create the namespace if it does not exist.
-                    # The '|| true' ensures the command succeeds even if the namespace is already there.
-                    kubectl --kubeconfig $KUBECONFIG_FILE create namespace development || true
+                    # Set KUBECONFIG for all subsequent commands in this script
+                    export KUBECONFIG=$KUBECONFIG_FILE
                     
-                    # Apply the Kubernetes manifests
-                    kubectl --kubeconfig $KUBECONFIG_FILE apply -f Terraform/development/kubernetes/ -n development
+                    # Create the namespace if it does not exist
+                    kubectl create namespace development --dry-run=client -o yaml | kubectl apply -f -
+                    
+                    # Apply the Kubernetes manifests to the correct namespace
+                    kubectl apply -f Terraform/development/kubernetes/ -n development
                     
                     # Update the deployment with the newly built image
-                    kubectl --kubeconfig $KUBECONFIG_FILE set image deployment/hello-world-deployment hello-world-app=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} -n development
+                    kubectl set image deployment/hello-world-deployment hello-world-app=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} -n development
                     '''
                 }
             }
