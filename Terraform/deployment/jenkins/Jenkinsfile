@@ -1,4 +1,4 @@
-// jenkins/Jenkinsfile - Final Version with Correct Manifest Path
+// jenkins/Jenkinsfile - Final Definitive Version
 
 pipeline {
     agent {
@@ -10,10 +10,8 @@ kind: Pod
 spec:
   serviceAccountName: default
   containers:
-  # The main build agent, based on a standard Ubuntu OS
   - name: build-agent
     image: ubuntu:22.04
-    # Run as root to install software with apt-get
     securityContext:
       runAsUser: 0
     command:
@@ -23,7 +21,6 @@ spec:
     env:
     - name: DOCKER_HOST
       value: tcp://localhost:2375
-  # The Docker-in-Docker sidecar container
   - name: dind
     image: docker:20.10.17-dind
     securityContext:
@@ -48,14 +45,10 @@ spec:
                 sh '''
                 echo "Installing all necessary tools..."
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get update
-                apt-get install -y openjdk-17-jdk maven git curl python3-pip docker.io
-                
+                apt-get update && apt-get install -y openjdk-17-jdk maven git curl python3-pip docker.io
                 pip3 install awscli
-
                 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                 install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-                
                 echo "Tool installation complete."
                 '''
                 checkout scm
@@ -81,7 +74,7 @@ spec:
 
         stage('Build & Push Docker Image') {
             steps {
-                // The .jar file is already in the workspace from the build stage
+                // The .jar file from the build stage is available because we use a single agent
                 sh """
                 echo "Waiting for Docker daemon..."
                 while ! docker info; do
@@ -99,11 +92,18 @@ spec:
 
         stage('Deploy to Development') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig-dev', variable: 'KUBECONFIG_FILE')]) {
+                // --- THIS STAGE IS NOW CORRECTED ---
+                // It now loads the dedicated AWS credentials for the development cluster
+                withCredentials([
+                    file(credentialsId: 'kubeconfig-dev', variable: 'KUBECONFIG_FILE'),
+                    string(credentialsId: 'DEV_AWS_ACCESS_KEY_ID', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'DEV_AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
                     sh '''
                     echo "Deploying to development cluster..."
-                    # --- THIS IS THE FINAL FIX ---
-                    # The path to the kubernetes manifests has been corrected
+                    # The AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables will be
+                    # automatically used by kubectl when it calls 'aws eks get-token'.
+                    
                     kubectl --kubeconfig $KUBECONFIG_FILE apply -f Terraform/development/kubernetes/ -n development
                     kubectl --kubeconfig $KUBECONFIG_FILE set image deployment/hello-world-deployment hello-world-app=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG} -n development
                     '''
